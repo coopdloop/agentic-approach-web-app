@@ -1,0 +1,74 @@
+# Run this command to start the database:
+# docker-compose up --build
+# version: "3.8"
+services:
+  app:
+    build: .
+    ports:
+      - '3000:3000'
+    depends_on:
+      db:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+
+    environment:
+      - DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_DATABASE}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_DATABASE=${DB_DATABASE}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
+      - OLLAMA_MODEL=${OLLAMA_MODEL}
+    volumes:
+      - ./documents:/usr/src/app/documents
+
+  db:
+    image: pgvector/pgvector:pg16
+    ports:
+      - 5432:5432
+    environment:
+      - POSTGRES_DB=${DB_DATABASE}
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 10s
+
+  ollama:
+    build:
+      context: .
+      dockerfile: ollama.dockerfile
+    ports:
+      - '11434:11434'
+    volumes:
+      - source: ./ollama_data
+        target: /root/.ollama
+        type: bind
+        bind:
+          create_host_path: true
+      # - type: bind
+      #   source: ./ollama_data
+      #   target: /root/.ollama
+    container_name: ollama
+    pull_policy: always
+    restart: always
+    healthcheck:
+      # test: ["CMD-SHELL", "ollama list | grep -q llama3 && echo 'llama3' || exit 1"]
+      test: ['CMD', 'ollama', 'list']
+      interval: 30s
+      retries: 5
+      start_period: 40s
+      timeout: 10s
+
+volumes:
+  postgres_data:
+  ollama_data:

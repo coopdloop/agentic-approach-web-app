@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RAG Query System</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        position: relative;
+      }
+
+      #modelStatus {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        padding: 5px 10px;
+        border-radius: 5px;
+        font-weight: bold;
+      }
+
+      .status-loading {
+        background-color: #ffd700;
+        color: #000;
+      }
+
+      .status-ready {
+        background-color: #4caf50;
+        color: #fff;
+      }
+
+      #waitingMessage {
+        display: none;
+        color: #666;
+        font-style: italic;
+        margin-bottom: 20px;
+      }
+
+      #querySection {
+        display: none;
+      }
+
+      select,
+      input,
+      button {
+        margin-bottom: 10px;
+        padding: 5px;
+      }
+
+      #loadingIcon {
+        display: none;
+        width: 20px;
+        height: 20px;
+        border: 3px solid #f3f3f3;
+        border-top: 3px solid #3498db;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-left: 10px;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      #result {
+        margin-top: 20px;
+        border: 1px solid #ddd;
+        padding: 10px;
+        min-height: 100px;
+      }
+
+      .file-status {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        margin-left: 10px;
+      }
+
+      .embedding {
+        border: 2px solid #3498db;
+        border-top: 2px solid #f3f3f3;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+
+      .embedded {
+        color: #2ecc71;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      #uploadForm {
+        margin-top: 20px;
+        padding: 10px;
+        border: 1px solid #ddd;
+      }
+
+      #uploadStatus {
+        margin-top: 10px;
+        font-style: italic;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="modelStatus">Model: Initializing...</div>
+    <h1>RAG Query System</h1>
+
+    <div id="waitingMessage">
+      Please wait while the agent is initializing...
+    </div>
+
+    <div id="querySection" style="display: none">
+      <select id="fileSelect">
+        <option value="">Select a file for context</option></select
+      ><br />
+      <input
+        type="text"
+        id="query"
+        placeholder="Enter your query"
+        onkeydown="handleKeyDown(event)"
+      />
+      <button onclick="sendQuery()">Send Query</button>
+      <div id="loadingIcon" style="display: none"></div>
+      <div id="result"></div>
+    </div>
+
+    <h2>Document List</h2>
+    <button onclick="checkNewDocuments()">Check for New Documents</button>
+    <div id="documentList"></div>
+
+    <div id="uploadForm">
+      <h3>Upload Document</h3>
+      <input
+        type="file"
+        id="fileInput"
+        accept=".pdf,.txt,.doc,.docx"
+        name="uploaded_file"
+      />
+      <button onclick="uploadDocument()">Upload</button>
+      <div id="uploadStatus"></div>
+    </div>
+
+    <!-- Start Script tags -->
+
+    <!-- Include Socket.IO client -->
+    <script src="/socket.io/socket.io.js"></script>
+
+    <!-- Include Axios package -->
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+
+    <!-- Agent web socket socket.io + DOM updates -->
+    <script>
+      const socket = io('/agent');
+      let isAgentReady = false;
+
+      socket.on('connect', () => {
+        console.log('Connected to agent namespace', socket.id);
+        isClientReady = true;
+        socket.emit('clientReady');
+      });
+
+      socket.on('embeddingStatus', ({ filename, status }) => {
+        console.log('embeddingStatus called', socket.id);
+        if (isClientReady) {
+          updateFileStatus(filename, status);
+        } else {
+          console.warn('Recieved embeddingStatus before client was ready.');
+        }
+      });
+
+      socket.on('agentReady', (data) => {
+        if (isClientReady) {
+          console.log('Received agentReady:', data);
+          updateAgentStatus(data);
+        } else {
+          console.warn('Received agentReady before client was ready');
+        }
+      });
+
+      function updateFileStatus(filename, status) {
+        const fileElement = document.querySelector(
+          `[data-filename="${filename}"]`,
+        );
+        if (fileElement) {
+          const statusElement = fileElement.querySelector('.file-status');
+          statusElement.className = 'file-status ' + status;
+          console.log('Updating filename', filename, status);
+          if (status === 'embedded') {
+            statusElement.innerHTML = '✓';
+            document.getElementById('result').innerText =
+              `File processed successfully: ${filename}`;
+          } else {
+            statusElement.innerHTML = '';
+          }
+        }
+      }
+
+      function updateAgentStatus(ready) {
+        const statusElement = document.getElementById('modelStatus');
+        if (ready) {
+          isAgentReady = true;
+          statusElement.textContent = 'Model: Ready';
+          statusElement.className = 'status-ready';
+          document.getElementById('waitingMessage').style.display = 'none';
+          document.getElementById('querySection').style.display = 'block';
+        } else {
+          statusElement.textContent = 'Model: Initializing...';
+          statusElement.className = 'status-loading';
+        }
+      }
+
+      function handleKeyDown(event) {
+        if (event.key === 'Enter') {
+          sendQuery();
+        }
+      }
+
+      async function sendQuery() {
+        if (!isAgentReady) {
+          alert('The agent is not ready yet. Please wait.');
+          return;
+        }
+        const query = document.getElementById('query').value;
+        const selectedFile = document.getElementById('fileSelect').value;
+        if (!selectedFile) {
+          alert('Please select a file for context.');
+          return;
+        }
+        document.getElementById('loadingIcon').style.display = 'inline-block';
+        try {
+          document.getElementById('result').innerText =
+            `Processing query for ${selectedFile}`;
+          const response = await axios.post('/query', {
+            query,
+            context: selectedFile,
+          });
+          document.getElementById('result').innerText = response.data.result;
+        } catch (error) {
+          console.error('Error:', error);
+          document.getElementById('result').innerText = 'An error occurred';
+        } finally {
+          document.getElementById('loadingIcon').style.display = 'none';
+        }
+      }
+
+      async function checkNewDocuments() {
+        try {
+          await loadDocumentList();
+          const response = await axios.get('/check-new-documents');
+          document.getElementById('result').innerText = response.data.message;
+        } catch (error) {
+          console.error('Error:', error);
+          document.getElementById('result').innerText =
+            'An error occurred while checking for new documents';
+        }
+      }
+
+      async function embedDocumentRequest(documentName) {
+        try {
+          const response = await axios.post('/embed', {
+            documentName: documentName,
+          });
+          document.getElementById('result').innerText = response.data.message;
+        } catch (error) {
+          console.error('Error:', error);
+        }
+      }
+
+      async function loadDocumentList() {
+        try {
+          const response = await axios.get('/document-list');
+          const documentList = document.getElementById('documentList');
+          const fileSelect = document.getElementById('fileSelect');
+          documentList.innerHTML = '';
+          fileSelect.innerHTML =
+            '<option value="">Select a file for context</option>';
+          response.data.documents.forEach((doc) => {
+            const docElement = document.createElement('div');
+            docElement.setAttribute('data-filename', doc);
+            docElement.innerHTML = `
+          ${doc}
+          <span class="file-status">?</span>
+          <button class="file-request-button" onclick="embedDocumentRequest('${doc}')">embed</button>
+        `;
+            documentList.appendChild(docElement);
+
+            const option = document.createElement('option');
+            option.value = doc;
+            option.textContent = doc;
+            fileSelect.appendChild(option);
+          });
+        } catch (error) {
+          console.error('Error:', error);
+          document.getElementById('documentList').innerText =
+            'An error occurred while loading the document list';
+        }
+      }
+
+      // Initialize when the page loads
+      window.onload = loadDocumentList;
+
+      async function uploadDocument() {
+        const fileInput = document.getElementById('fileInput');
+        const file = fileInput.files[0];
+        if (!file) {
+          alert('Please select a file to upload');
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append('document', file);
+        try {
+          const response = await fetch('/upload', {
+            method: 'POST',
+            body: formData,
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            document.getElementById('uploadStatus').textContent =
+              `File uploaded successfully: ${result.filename}`;
+            // Optionally, refresh the document list here
+            loadDocumentList();
+          } else {
+            document.getElementById('uploadStatus').textContent =
+              'Upload failed';
+          }
+        } catch (error) {
+          console.error('Error:', error);
+          document.getElementById('uploadStatus').textContent =
+            'An error occurred during upload';
+        }
+      }
+    </script>
+  </body>
+</html>

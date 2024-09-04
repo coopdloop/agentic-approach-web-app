@@ -1,0 +1,50 @@
+{
+  "name": "agentic-approach",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "ts-node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "build": "tsc",
+    "lint": "eslint . --ext .ts",
+    "prettier": "prettier --check .",
+    "prettier:fix": "prettier --write .",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "db:init": "docker compose up -d db"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@langchain/community": "^0.2.31",
+    "@langchain/core": "^0.2.31",
+    "@langchain/ollama": "^0.0.4",
+    "@langchain/openai": "^0.2.8",
+    "axios": "^1.7.7",
+    "body-parser": "^1.20.2",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "langchain": "^0.2.17",
+    "multer": "^1.4.5-lts.1",
+    "pdf-parse": "^1.1.1",
+    "pg": "^8.12.0",
+    "prettier": "^3.3.3",
+    "socket.io": "^4.7.5",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^22.5.1",
+    "@types/pg": "^8.11.8",
+    "@types/socket.io": "^3.0.1",
+    "@types/uuid": "^10.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.4.0",
+    "@typescript-eslint/parser": "^8.4.0",
+    "eslint": "^8.50.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.4"
+  }
+}
